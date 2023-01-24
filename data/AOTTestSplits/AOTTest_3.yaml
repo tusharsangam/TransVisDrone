@@ -1,0 +1,16 @@
+annotation_path: /home/tu666280/aot_part_1_yolo_data
+annotation_test: test/part3/labels
+annotation_train: train/labels
+annotation_val: val/full/labels
+names:
+- drone
+- airborne
+nc: 2
+path: /home/tu666280/aot_part_1_yolo_data
+test: test/part3/frames
+train: train/frames
+val: val/full/frames
+video_root_path: /home/tu666280/aot_part_1_yolo_data
+video_root_path_test: test/part3/videos
+video_root_path_train: train/videos
+video_root_path_val: val/full/videos

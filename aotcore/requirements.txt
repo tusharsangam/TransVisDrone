@@ -1,0 +1,11 @@
+aicrowd_api
+coloredlogs
+matplotlib
+pandas
+loguru
+boto3
+opencv-python<4.3
+bounding-box
+numpy
+Pillow
+imgaug
