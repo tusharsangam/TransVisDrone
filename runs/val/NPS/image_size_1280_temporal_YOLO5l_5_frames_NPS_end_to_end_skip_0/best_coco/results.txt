@@ -1,0 +1,2 @@
+               Class     Images     Labels          P          R     mAP@.5 mAP@.5:.95   epoch(3)
+                 all       9119      16362      0.917      0.903      0.935      0.501          3

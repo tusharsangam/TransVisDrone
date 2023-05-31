@@ -1,0 +1,2 @@
+               Class     Images     Labels          P          R     mAP@.5 mAP@.5:.95   epoch(7)
+                 all         60          0          0          0          0          0          7
