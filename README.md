@@ -62,3 +62,31 @@ While best runs are saved in runs/val/*
 AOT results can't only be evaluated using COCO criteria, it has its own grading criteria.
 To run evaluation, save all the predictions & run evaluate_aot.py with given arguments.
 To fasten up the evaluation, I split up AOT test data in chunks, get predictions parallely using SBATCH Array & then fuse all the predictions in one.
+
+
+# Citation
+If you find our work useful in your research, please consider citing:
+``` bash
+@INPROCEEDINGS{10161433,
+  author={Sangam, Tushar and Dave, Ishan Rajendrakumar and Sultani, Waqas and Shah, Mubarak},
+  booktitle={2023 IEEE International Conference on Robotics and Automation (ICRA)}, 
+  title={TransVisDrone: Spatio-Temporal Transformer for Vision-based Drone-to-Drone Detection in Aerial Videos}, 
+  year={2023},
+  volume={},
+  number={},
+  pages={6006-6013},
+  keywords={Performance evaluation;Visualization;Image edge detection;Robot vision systems;Transformers;Throughput;Real-time systems},
+  doi={10.1109/ICRA48891.2023.10161433}}
+```
+
+# Contact
+If you have any questions, please feel free to contact us:
+
+[Tushar Sangam](https://linkedin.com/in/tusharsangam): [tusharsangam5@gmail.com](mailto:tusharsangam5@gmail.com)
+
+[Ishan Dave](https://scholar.google.co.in/citations?user=fWu6sFgAAAAJ&hl=en): [ishandave@knights.ucf.edu](mailto:ishandave@knights.ucf.edu)
+
+# References
+* [yolov5-tph](https://github.com/cv516Buaa/tph-yolov5)
+* [ultralytics/yolov5](https://github.com/ultralytics/yolov5)
+* [SwinTransformer](https://github.com/microsoft/Swin-Transformer)
