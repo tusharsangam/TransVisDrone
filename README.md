@@ -5,7 +5,7 @@ Major Update: Paper Accepted to 2023 IEEE International Conference on Robotics a
 
 [Project Page link](https://tusharsangam.github.io/TransVisDrone-project-page/)
 
- [Pretrained models available at Drive](https://drive.google.com/drive/folders/1zOy_zIxkrvmHBIPU72PB_o0Da-h0h5JA?usp=sharing)
+[Pretrained models available at Drive](https://drive.google.com/drive/folders/1zOy_zIxkrvmHBIPU72PB_o0Da-h0h5JA?usp=sharing)
  
 Codes and Visualizations coming soon! 
 Cleaning up training & validation runs, will upload pretrained models soon
