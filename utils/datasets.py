@@ -401,7 +401,8 @@ def img2label_paths(img_paths):
 def img2label_paths(img_paths, annotation_dir):
     #return [os.path.join(annotation_dir, os.path.basename(img_path).replace(".png", ".txt")) for img_path in img_paths ]
     get_clip_id = lambda x: os.path.basename(x).split(".")[0].split("_")[1]
-    get_frame_id = lambda x: str(int(os.path.basename(x).split(".")[0].split("_")[-1])-1).zfill(5) if annotation_dir.find("NPS") > -1 else str(int(os.path.basename(x).split(".")[0].split("_")[-1])).zfill(5)  #to adjust to ishan's annotations
+    #get_frame_id = lambda x: str(int(os.path.basename(x).split(".")[0].split("_")[-1])-1).zfill(5) if annotation_dir.find("NPS") > -1 else str(int(os.path.basename(x).split(".")[0].split("_")[-1])).zfill(5)  #to adjust to ishan's annotations
+    get_frame_id = lambda x: str(int(os.path.basename(x).split(".")[0].split("_")[-1])).zfill(5)
     meta_paths =[ [str(Path(x).parent.parent), get_clip_id(x), get_frame_id(x)] for x in img_paths]
     #print(meta_paths[0])
     return [ os.path.join(annotation_dir, f"Clip_{clip_id}_{frame_id}.txt") for (directory, clip_id, frame_id) in meta_paths]
