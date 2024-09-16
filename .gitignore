@@ -2,3 +2,4 @@ Videos/
 *.pt
 *.jpg
 *.png
+*/__pycache__/*
