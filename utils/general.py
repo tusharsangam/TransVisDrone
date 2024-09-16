@@ -354,7 +354,7 @@ def check_file(file, suffix=''):
         return files[0]  # return file
 
 
-def check_dataset(data, autodownload=True):
+def check_dataset(data, autodownload=True, streamable_hence_skip=False):
     # Download and/or unzip dataset if not found locally
     # Usage: https://github.com/ultralytics/yolov5/releases/download/v1.0/coco128_with_yaml.zip
 
@@ -414,7 +414,8 @@ def check_dataset(data, autodownload=True):
                     r = exec(s, {'yaml': data})  # return None
                 print(f"Dataset autodownload {f'success, saved to {root}' if r in (0, None) else 'failure'}\n")
             else:
-                raise Exception('Dataset not found.')
+                if not streamable_hence_skip:
+                    raise Exception('Dataset not found.')
 
     return data  # dictionary
 

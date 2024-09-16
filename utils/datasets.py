@@ -3,7 +3,7 @@
 Dataloaders and dataset utils
 """
 
-import glob
+import glob, sys
 import hashlib
 import json
 import logging
@@ -103,11 +103,12 @@ def seed_worker(worker_id):
     random.seed(worker_seed)
 
 def create_dataloader(path, annotation_path, video_root_path, imgsz, batch_size, stride, single_cls=False, hyp=None, augment=False, cache=False, pad=0.0,
-                      rect=False, rank=-1, workers=3, image_weights=False, quad=False, prefix='', is_training=True, num_frames=5):
+                      rect=False, rank=-1, workers=3, image_weights=False, quad=False, prefix='', is_training=True, num_frames=5, makestreamloader=False):
     # Make sure only the first process in DDP process the dataset first, and the following others can use the cache
     with torch_distributed_zero_first(rank):
         #LoadImagesAndLabels
-        dataset = LoadClipsAndLabels(path, annotation_path, video_root_path, imgsz, batch_size,
+        if makestreamloader:
+            dataset = LoadClipsStream(path, annotation_path, video_root_path, imgsz, batch_size,
                                       augment=augment,  # augment images
                                       hyp=hyp,  # augmentation hyperparameters
                                       rect=rect,  # rectangular training
@@ -120,6 +121,20 @@ def create_dataloader(path, annotation_path, video_root_path, imgsz, batch_size,
                                       is_training=is_training,
                                       num_frames=num_frames
                                       )
+        else:
+            dataset = LoadClipsAndLabels(path, annotation_path, video_root_path, imgsz, batch_size,
+                                        augment=augment,  # augment images
+                                        hyp=hyp,  # augmentation hyperparameters
+                                        rect=rect,  # rectangular training
+                                        cache_images=cache,
+                                        single_cls=single_cls,
+                                        stride=int(stride),
+                                        pad=pad,
+                                        image_weights=image_weights,
+                                        prefix=prefix,
+                                        is_training=is_training,
+                                        num_frames=num_frames
+                                        )
     shuffle = is_training
     shuffle = False if rect else shuffle
     batch_size = min(batch_size, len(dataset))
@@ -132,13 +147,14 @@ def create_dataloader(path, annotation_path, video_root_path, imgsz, batch_size,
     generator = torch.Generator()
     generator.manual_seed(0)
     print(f"data loader shuffle {shuffle}") if rank in [0, -1] else None
+    collate_fn = LoadClipsStream.collate_fn if makestreamloader else LoadClipsAndLabels.collate_fn
     dataloader = loader(dataset,
                         batch_size=batch_size,
                         num_workers=nw,
                         sampler=sampler,
                         pin_memory=True,
                         drop_last=False,
-                        collate_fn=LoadClipsAndLabels.collate_fn4 if quad else LoadClipsAndLabels.collate_fn,
+                        collate_fn=LoadClipsAndLabels.collate_fn4 if quad else collate_fn,
                         generator=generator,
                         shuffle = shuffle,
                         worker_init_fn=seed_worker
@@ -420,6 +436,155 @@ def get_video_length(video_root_path):
             n_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
             video_id_length[video_id] = n_frames
     return video_id_length
+
+class LoadClipsStream(Dataset):
+    # YOLOv5 train_loader/val_loader, loads clips and labels for training and validation
+    cache_version = 0.6  # dataset labels *.cache version
+
+    def __init__(self, path, annotation_path, video_root_path, img_size=640, batch_size=16, augment=False, hyp=None, rect=False, image_weights=False,
+                 cache_images=False, single_cls=False, stride=32, pad=0.0, prefix='', is_training=True, num_frames=5):
+        self.img_size = img_size
+        self.augment = augment
+        self.hyp = hyp
+        self.image_weights = image_weights
+        self.rect = False if image_weights else rect
+        self.mosaic = self.augment and not self.rect  # load 4 images at a time into a mosaic (only during training)
+        self.mosaic_border = [-img_size // 2, -img_size // 2]
+        self.stride = stride
+        self.pad = pad
+        #self.path = path
+        self.is_training = is_training
+        self.frame_wise_aug = False
+        if self.hyp:
+            self.frame_wise_aug = int(self.hyp["frame_wise"]) if "frame_wise" in self.hyp else 0 == 1
+        print(f"Frame wise augmentation set to {self.frame_wise_aug}")
+        self.video_root_path = video_root_path
+        #self.video_length_dict = get_video_length(self.video_root_path)
+        self.num_frames = num_frames #int(self.hyp['num_frames'])
+        self.skip_frames = int(self.hyp["skip_rate"]) if self.hyp else self.num_frames - 1
+        self.albumentations = None
+        self.video_cap = None
+        if augment:
+            self.albumentations = AlbumentationsTemporal(self.num_frames) if not self.frame_wise_aug else Albumentations()
+
+    def __len__(self):
+        #return sys.maxsize
+        #comment this & uncomment sys.maxsize
+        video_path = "Videos/Clip_50.mov"
+        cap = cv2.VideoCapture(video_path)
+        n =  int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+        cap.release()
+        return n
+    
+    def sample_temporal_frames_from_stream(self, num_of_frames):
+        #make streamable interface here, get num_of_frames
+        video_path = "Videos/Clip_50.mov"
+        self.video_cap = cv2.VideoCapture(video_path) if self.video_cap is None else self.video_cap
+        if not self.video_cap.isOpened():
+            print(f"Error: Unable to open video file: {video_path}")
+            return
+        imgs, orig_shapes, resized_shapes = [], [], []
+        for i in range(num_of_frames):
+            ret, im = self.video_cap.read()
+            h0, w0 = im.shape[:2]  # orig hw
+            r = self.img_size / max(h0, w0)  # ratio
+            if r != 1:  # if sizes are not equal
+                im = cv2.resize(im, (int(w0 * r), int(h0 * r)),
+                                interpolation=cv2.INTER_AREA if r < 1 and not self.augment else cv2.INTER_LINEAR)
+            imgs.append(im)
+            orig_shapes.append((h0, w0))
+            resized_shapes.append(im.shape[:2][::-1])#wh
+        resized_shapes = np.array(resized_shapes, dtype=int).reshape(-1, 2)
+        return imgs, orig_shapes, resized_shapes
+    
+    def __del__(self):
+        if self.video_cap is not None:
+            self.video_cap.release()
+    
+    def __getitem__(self, index):
+        #print(index, self.indices[index])
+       
+        hyp = self.hyp
+        mosaic = self.mosaic and random.random() < hyp['mosaic']
+        
+        #do temporal sampling
+        imgs, orig_shapes, shapes = self.sample_temporal_frames_from_stream(self.num_frames)
+        (h0, w0) = orig_shapes[0]
+        w, h = shapes[0]
+        # # Letterbox
+        if self.rect:
+        # Sort by aspect ratio
+            s = shapes  # wh
+            ar = s[:, 1] / s[:, 0]  # aspect ratio
+            irect = ar.argsort()
+            imgs = [imgs[i] for i in irect]
+            shapes = s[irect]  # wh
+            
+            ar = ar[irect]
+
+            # Set training image shapes
+            shapes = [[1, 1]] * 1
+            for i in range(1):
+                ari = ar[0 == i]
+                mini, maxi = ari.min(), ari.max()
+                if maxi < 1:
+                    shapes[i] = [maxi, 1]
+                elif mini > 1:
+                    shapes[i] = [1, 1 / mini]
+
+            batch_shapes = np.ceil(np.array(shapes) * self.img_size / self.stride + self.pad).astype(np.int) * self.stride
+        shape = batch_shapes[0] if self.rect else self.img_size  # final letterboxed shape
+        imgs, ratio, pad = letterbox_temporal(imgs, shape, auto=False, scaleup=self.augment)
+        shapes = (h0, w0), ((h / h0, w / w0), pad) # for COCO mAP rescaling
+        
+    
+        img = np.stack(imgs, 0) # t x h X w X C
+        # labels = temporal_labels
+        if self.augment:
+            img, labels = random_perspective_temporal(img, labels,
+                                                degrees=hyp['degrees'],
+                                                translate=hyp['translate'],
+                                                scale=hyp['scale'],
+                                                shear=hyp['shear'],
+                                                perspective=hyp['perspective'], frame_wise_aug=self.frame_wise_aug)
+        
+        #plot_images_temporal(img, [labels], fname=os.path.basename(temporal_frames_path[0]), n_batch=1, LOGGER=LOGGER)
+        
+        
+        t = len(imgs)
+        # Convert
+        img = [np.ascontiguousarray(img[ti].transpose((2, 0, 1))[::-1]) for ti in range(t)] # HWC to CHW, BGR to RGB
+        img = np.stack(img, axis=0)
+    
+        return torch.from_numpy(img), shapes
+
+    @staticmethod
+    def collate_fn(batch):
+        img, shapes = zip(*batch)  # transposed label - > B [ n X T X 6 ]
+        
+        T = img[0].shape[0]
+        new_shapes = []
+        
+        for shape in shapes:
+            new_shapes += [shape for _ in range(T)]
+        
+        shapes = tuple(new_shapes)
+        
+        img = torch.stack(img, 0) #B X T X C X H X W -> B*TXCXHXW
+        B, T, C, H, W = img.shape
+        
+        assert len(shapes) == B*T, print(f"in collate function collected shapes {len(shapes)} & images collected {B*T}")
+         # B [n_i x T X 6]
+        #print(label)
+        img = img.reshape(B*T, C, H, W)
+    
+        return img, shapes
+    
+    @staticmethod
+    def collate_fn4(batch):
+        print("shouldn't come here, this collate function is for quad training & haven't been rewritten for temporal")
+        pass
+   
 
 class LoadClipsAndLabels(Dataset):
     # YOLOv5 train_loader/val_loader, loads clips and labels for training and validation
